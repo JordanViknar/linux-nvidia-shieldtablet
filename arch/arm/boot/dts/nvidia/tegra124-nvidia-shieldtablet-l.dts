@@ -9,7 +9,7 @@
 	compatible = "nvidia,shieldtablet", "nvidia,shieldtablet-l", "nvidia,tegra124";
 
 	chosen {
-		bootargs = "panic=15 gpt root=/dev/mmcblk0p23 rw rootwait rootflags=defaults,noatime,nodiratime loop=media/0/Linux/linux.img loopflags=subvol=/pmos,compress=zstd:1,commit=120,discard=async,noatime,nodiratime";
+		bootargs = "panic=15 gpt root=/dev/mmcblk1p2 rw rootwait rootfstype=f2fs rootflags=compress_algorithm=zstd:1,compress_chksum,atgc,gc_merge,lazytime";
 
 		linux,initrd-start = <0x81680000>;
 		linux,initrd-end = <0x82800000>;

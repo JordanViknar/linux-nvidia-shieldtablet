@@ -211,8 +211,6 @@ properties:
           - const: nvidia,tegra124
       - description: NVIDIA SHIELD Tablet
         items:
-          - enum:
-              - nvidia,shieldtablet-l
           - const: nvidia,shieldtablet
           - const: nvidia,tegra124
       - items:

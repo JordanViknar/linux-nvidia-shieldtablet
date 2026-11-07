@@ -2,14 +2,17 @@
 
 > [!IMPORTANT]
 > 
-> This kernel is being tested exclusively on an NVIDIA SHIELD Tablet K1 with the NVIDIA SHIELD Tablet K1's Android 5.0/L bootloader. It **should** work on other models, but not necessarily other bootloader versions.
+> This kernel is tested exclusively on the NVIDIA SHIELD Tablet K1's 0.0.0 (first bootloader, Android L, equivalent to 3.1.1 on other models) and 5.2.0 (Android M/N) bootloaders.
+> 
+> Support for the 5.2.0 bootloader is currently still very rough, beware. It is however intended to eventually become the only supported vendor bootloader setup.
 >
-> **Use this kernel at your own risk.** It is still in a bit of an experimental state. When using this kernel, you agree to the possibility of hardware damage. I've had none so far, but cannot guarantee you won't.
+> **Use this kernel at your own risk.**
+> 
+> It is still in a somewhat experimental state. When using this kernel, you agree to the possibility of hardware damage. I've had none so far, but cannot guarantee you won't.
 
 ## Compatibility and build notes
 
-- Compatibility with the Android M/N bootloader is not immediately planned due to seemingly stricter requirements (no initramfs unless bundled in-kernel, smaller kernel image size). The structure to support it is in place though.
-- A U-Boot port is planned, but not yet done.
+- A U-Boot port is planned, but not yet finished and published.
 - This port uses `shieldtablet_defconfig` to store its default kernel configuration.
 - **Recommended compiler flags:**
 
@@ -18,6 +21,8 @@
   ```
 
 ## Current status
+
+*(Note : this section currently applies only to the 0.0.0/3.1.1 bootloader.)*
 
 ### ✅ Fully functional
 
@@ -102,7 +107,8 @@ Drivers that are unique to this kernel port and not mainlined:
 
 ### Major
 
-- **Bootloader:** Baking too many modules into the kernel itself will cause kernel and/or initramfs failures on boot. Reason unknown.
+- **Bootloader:** Baking too many modules into the kernel itself can/will cause kernel and/or initramfs failures on boot when using the NVIDIA bootloader. Reason unknown.
+	- Not sure which bootloader is more sensitive to this problem.
 	- U-Boot may help avoid this issue in the future.
 - **Display:** Do not reboot directly from mainline into downstream kernel. It glitches the display and may or may not cause hardware damage if left in this state too long. Rebooting from downstream into mainline is unaffected.
 - **Touchscreen:** Requires the closed-source downstream Android userspace touch stack (`ts.default.so` / `librm31080.so`), run with `rm-wrapper`.

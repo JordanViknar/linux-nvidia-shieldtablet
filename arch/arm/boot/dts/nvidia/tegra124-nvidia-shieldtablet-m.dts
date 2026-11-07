@@ -3,20 +3,61 @@
 
 #include "tegra124-nvidia-shieldtablet.dtsi"
 
-/*
- * Essentially an untested placeholder. Don't expect this to work.
- */
-
 / {
-	model = "NVIDIA SHIELD Tablet (Android M/N)";
-	// "nvidia,shieldtablet" goes first to keep the same Wi-Fi/Bluetooth firmware blob naming.
-	compatible = "nvidia,shieldtablet", "nvidia,shieldtablet-m", "nvidia,tegra124";
+	model = "NVIDIA SHIELD Tablet (5.2.0)";
+	compatible = "nvidia,shieldtablet", "nvidia,tegra124";
+
+	/*
+	 * Downstream command line passed "mem=2010M@2048M", i.e.
+	 * 0x80000000 - 0xfda00000. Everything above is owned by firmware:
+	 *
+	 *   0xfdaff000  LP0 resume vector (4 KiB)   (lp0_vec=4096@0xfdaff000)
+	 *   0xfdb00000  NCK (1 MiB)                 (nck=1048576@0xfdb00000)
+	 *   0xfe000000  TSEC carveout (32 MiB)      (tsec=32M@4064M)
+	 *
+	 * Rather than reserving each of those (and guessing what sits in the
+	 * unnamed gaps, which on this bootloader likely includes TrustZone
+	 * memory), the kernel is simply never given that range, exactly like
+	 * the working downstream kernel.
+	 */
+	memory@80000000 {
+		reg = <0x0 0x80000000 0x0 0x7da00000>;
+	};
 
 	chosen {
+		bootargs = "panic=15 gpt root=/dev/mmcblk1p2 rw rootwait rootfstype=f2fs rootflags=compress_algorithm=zstd:1,compress_chksum,atgc,gc_merge,lazytime";
+
 		/*
-		 * Note : Configure initramfs (if there even is one) and 
-		 * framebuffer for Android M/N
+		 * Ramdisk placement (reverse-engineered from the 5.2.0 EBT):
+		 * the bootloader ignores the kernel/ramdisk addresses in the
+		 * Android boot image header and copies the ramdisk to a fixed
+		 * DRAM_BASE + 0x2580000 = 0x82580000 (the Android L bootloader
+		 * used + 0x1680000 = 0x81680000, which is why -l has a different
+		 * value). It rejects ramdisks larger than 20 MiB.
+		 *
+		 * It writes linux,initrd-start/end into the DTB it loads from its
+		 * own "DTB" partition, but with CONFIG_ARM_APPENDED_DTB our DTB
+		 * replaces that one, so they must be set here. Like -l, the end
+		 * is a fixed upper bound (17.5 MiB), not the exact size. The
+		 * absolute maximum is 0x83980000, where the bootloader puts its own
+		 * DTB.
 		 */
+		linux,initrd-start = <0x82580000>;
+		linux,initrd-end = <0x83700000>;
+
+		/*
+		 * Display is left on by the bootloader, same framebuffer as on
+		 * the Android L bootloader (tegra_fbmem=18743296@0xad012000,
+		 * 1200x1920, 64 byte aligned pitch).
+		 */
+		framebuffer@ad012000 {
+			compatible = "simple-framebuffer";
+			memory-region = <&bootloader_fb>;
+			width = <1200>;
+			height = <1920>;
+			stride = <(1216 * 4)>;
+			format = "a8b8g8r8";
+		};
 	};
 
 	reserved-memory {
@@ -24,30 +65,38 @@
 		#size-cells = <2>;
 		ranges;
 
-		// Note : configure Android M/N reserved memory areas
+		bootloader_fb: bootloader-framebuffer@ad012000 {
+			reg = <0x0 0xad012000 0x0 0x011e0000>;
+			no-map;
+		};
+
+		/*
+		 * Used by the downstream kernel for ramoops/pstore
+		 * ("ramoops: attached 0x200000@0xfd800000") and probably by the
+		 * bootloader for crash data ("found existing invalid buffer").
+		 * Kept away from the allocator.
+		 */
+		ramoops@fd800000 {
+			reg = <0x0 0xfd800000 0x0 0x00200000>;
+			no-map;
+		};
+
+		/*
+		 * Not reserved on purpose: downstream carves out 188 MiB at
+		 * 0xf1c00000 as a resizable VPR CMA heap ("vpr_resize"). The
+		 * bootloader reports no VPR base ("Vpr: 00000000 - 0b9fffff"),
+		 * so nothing protects it at boot and it is plain RAM until a
+		 * driver asks TrustZone to program VPR.
+		 */
 	};
 
-	/* I have yet to check properly but I believe NVIDIA fixed their mess */
+	/*
+	 * Standard PSCI 0.2: function IDs come from the specification, so
+	 * none are listed (unlike -l, whose bootloader needs them).
+	 * Matches the vendor DTB (compatible "arm,psci-0.2", method "smc").
+	 */
 	psci {
 		compatible = "arm,psci-0.2";
 		method = "smc";
-	};
-	
-	cpus {
-		cpu0: cpu@0 {
-			enable-method = "psci";
-		};
-
-		cpu1: cpu@1 {
-			enable-method = "psci";
-		};
-
-		cpu2: cpu@2 {
-			enable-method = "psci";
-		};
-
-		cpu3: cpu@3 {
-			enable-method = "psci";
-		};
 	};
 };

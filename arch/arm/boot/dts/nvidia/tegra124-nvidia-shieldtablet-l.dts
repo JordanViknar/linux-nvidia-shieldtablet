@@ -4,9 +4,8 @@
 #include "tegra124-nvidia-shieldtablet.dtsi"
 
 / {
-	model = "NVIDIA SHIELD Tablet (Android L)";
-	// "nvidia,shieldtablet" goes first to keep the same Wi-Fi/Bluetooth firmware blob naming.
-	compatible = "nvidia,shieldtablet", "nvidia,shieldtablet-l", "nvidia,tegra124";
+	model = "NVIDIA SHIELD Tablet (3.1.1/0.0.0)";
+	compatible = "nvidia,shieldtablet", "nvidia,tegra124";
 
 	chosen {
 		bootargs = "panic=15 gpt root=/dev/mmcblk1p2 rw rootwait rootfstype=f2fs rootflags=compress_algorithm=zstd:1,compress_chksum,atgc,gc_merge,lazytime";

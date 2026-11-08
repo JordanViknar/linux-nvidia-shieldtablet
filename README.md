@@ -1,10 +1,14 @@
+> [!IMPORTANT]
+> 
+> This kernel was recently moved to support the latest SHIELD Tablet bootloader **instead** of the first one. Keep this in mind if you're updating it or following past instructions.
+
 # Mainline Linux for the NVIDIA SHIELD Tablet
 
 > [!IMPORTANT]
 > 
-> This kernel is tested exclusively on an NVIDIA SHIELD Tablet K1 with the 5.2.0 (Android M/N) bootloader.
-> 
-> Support for the 5.2.0 bootloader is currently still very rough, beware. The switch from 0.0.0/3.1.1 is still very recent.
+> This kernel is tested exclusively on an NVIDIA SHIELD Tablet K1 with the 5.2.0 image's bootloader.
+> However, it should work on all SHIELD Tablet models, as long as they use their latest bootloader (which is identical accross all models).
+> If your bootloader (Volume Down + Power) says `4.00.2016.04-8b2413b7`, you're (probably) good to go !
 >
 > **Use this kernel at your own risk.**
 > 
@@ -12,7 +16,7 @@
 
 ## Compatibility and build notes
 
-- A U-Boot port is planned, but not yet finished and published.
+- A U-Boot port is in the works, but not yet finished and published.
 - This port uses `shieldtablet_defconfig` to store its default kernel configuration.
 - **Recommended compiler flags:**
 
@@ -22,14 +26,12 @@
 
 ## Current status
 
-*(Note : this section has not been updated yet for the 5.2.0 bootloader.)*
-
 ### ✅ Fully functional
 
 - **Backlight**
 - **Battery fuel gauge:** onsemi LC709203F (custom driver: `lc709203f`)
 - **Charger:** TI BQ24192 (driver: `bq24190-charger`)
-- **CPU:** 4× 2.1 GHz Cortex-A15
+- **CPUs:** 4× 2.1 GHz Cortex-A15
 - **DRM:** `tegradrm` & `simpledrm`
 - **eMMC:** SanDisk SDW16G
 - **Hardware keys:** "Power", "Volume Up", "Volume Down", and "Lid Switch" function perfectly.
@@ -46,20 +48,20 @@
 ### 🟡 Fully functional, with quirks
 
 - **Audio:** Realtek RT5639 Codec
-- **Bluetooth:** Broadcom BCM43241B0 (using `hci_bcm`)
-- **Touchscreen:** Raydium RM31080 (using custom driver `raydium-rm31080-spi-bridge`)
-- **Wi-Fi:** Broadcom BCM43241B0 (using `brcmfmac`)
+- **Bluetooth:** Broadcom BCM43241B0 (driver: `hci_bcm`)
+- **Touchscreen:** Raydium RM31080 (custom driver: `raydium-rm31080-spi-bridge`)
+- **Wi-Fi:** Broadcom BCM43241B0 (driver: `brcmfmac`)
 
 ### ⚠️ Partially functional
 
 - **Display:** Minor instabilities (strange jagged lines) found under high system load.
   - Can on very rare occasion crash on startup with a screen whiteout effect. I suggest quickly emergency rebooting with the power button should this happen.
 - **GPU:** Using `nouveau`. Pretty unstable, and works only with a patch to Mesa: [mesa-tegra](https://github.com/JordanViknar/mesa-tegra/tree/tegra-fixes).
-  - Xorg seems to have major issues; Wayland works a bit better.
+  - Xorg seems to have major issues, Wayland works quite better.
   - Personally, I have `MESA_LOADER_DRIVER_OVERRIDE=tegra` in `/etc/environment` and then enable software rendering for applications that are too buggy.
   - Example for GTK apps: `GSK_RENDERER=cairo`
 - **HDMI:** Audio is fully functional, but HDMI in general is unstable.
-  - It can crash the tablet if connected in some situations (framebuffer usage, some monitor setups ?).
+  - It can crash the kernel if connected in some situations (during framebuffer usage, some monitor setups ?).
 
 ### Configured, untested
 
@@ -76,9 +78,7 @@
 ### Unplanned (excluding external contributions)
 
 - **3G/LTE:** My SHIELD Tablet is a K1, it only has Wi-Fi.
-- **Stylus:** I do not have the stylus, so I cannot test it.
-
-> Elements not listed above are either not tested/worked on yet, or not applicable to this device.
+- **Stylus:** I don't have the stylus.
 
 ## Custom drivers
 
@@ -91,8 +91,8 @@ Drivers that are unique to this kernel port and not mainlined:
 - **Touchscreen - `raydium-rm31080-spi-bridge`**
   - Reproduces the `/dev/touch` misc-device protocol that the original out-of-tree downstream Raydium kernel driver exposed, so the closed-source Android userspace touch stack can be used unmodified on a mainline kernel.
   - It does not decode touch data itself, and is not intended to be upstreamed.
-  - See `drivers/input/touchscreen/raydium-rm31080-spi-bridge.c`.
   - Unlike the L4T port driver, no separate Xorg configuration is required, and this driver has been confirmed to work with Wayland as a result.
+  - See `drivers/input/touchscreen/raydium-rm31080-spi-bridge.c`.
 
 ## Quirks
 
@@ -107,10 +107,9 @@ Drivers that are unique to this kernel port and not mainlined:
 
 ### Major
 
-- **Bootloader:** Baking too many modules into the kernel itself can/will cause kernel and/or initramfs failures on boot when using the NVIDIA bootloader. Reason unknown.
-	- Not sure which bootloader is more sensitive to this problem.
-	- U-Boot may help avoid this issue in the future.
-- **Display:** Do not reboot directly from mainline into downstream kernel. It glitches the display and may or may not cause hardware damage if left in this state too long. Rebooting from downstream into mainline is unaffected.
+- **Bootloader:**
+  - Might be sensitive to kernel/initramfs failures if the image is too large when using the NVIDIA bootloader.
+  - Tablet softlocks when rebooting from my mainline-based kernel to a downstream kernel, not the other way around though.
 - **Touchscreen:** Requires the closed-source downstream Android userspace touch stack (`ts.default.so` / `librm31080.so`), run with `rm-wrapper`.
   - Check my old [Xubuntu 22.04 rootfs builder](https://github.com/JordanViknar/shieldtablet-l4t-kernel-multirom-builder) for a working example in its code. The current kernel driver alone produces no touch events.
 
@@ -156,11 +155,11 @@ The 5.2.0 bootloader's firmware advertises PSCI 0.2, but its `SYSTEM_OFF` does n
 
 When the kernel finds a PSCI 0.2 firmware it claims the legacy `pm_power_off` hook for `SYSTEM_OFF`, and the Palmas driver only installs its own power-off callback if that hook is still free. The PMIC, which is what actually cuts the power on this tablet, was therefore never reached. The screen turned off, but the tablet stayed powered until the power button was held for ten seconds.
 
-Running the PMIC's handler after PSCI's does not help, since the firmware call never returns. The `-m` device tree therefore describes the firmware as PSCI 0.1 (`arm,psci`) with explicit `cpu_on`/`cpu_off` function IDs, like `-l` does. PSCI 0.1 neither claims `pm_power_off` nor registers a restart handler, so `SYSTEM_OFF` is never called, the PMIC powers the tablet off, and the PMC restart handler restarts it instead of `SYSTEM_RESET`.
+Running the PMIC's handler after PSCI's does not help, since the firmware call never returns. The device tree therefore describes the firmware as PSCI 0.1 (`arm,psci`) with explicit `cpu_on`/`cpu_off` function IDs. PSCI 0.1 neither claims `pm_power_off` nor registers a restart handler, so `SYSTEM_OFF` is never called, the PMIC powers the tablet off, and the PMC restart handler restarts it instead of `SYSTEM_RESET`.
 
 The catch is that PSCI 0.1 has no `AFFINITY_INFO`, so CPU hotplug cannot confirm that a CPU is really off before it is brought back.
 
-See `arch/arm/boot/dts/nvidia/tegra124-nvidia-shieldtablet-m.dts`.
+See `arch/arm/boot/dts/nvidia/tegra124-nvidia-shieldtablet-vendor.dts`.
 
 ### USB Device Mode
 
@@ -194,13 +193,13 @@ This port is a prototype, and due to time constraints and the complexity of this
 
 It has been fully tested on my personal tablet, and I made sure to understand the underlying issues and suggested solutions.
 
-If this is problematic for you, you are free to develop your own port and to use mine as reference. Do note a lot of the code will be rewritten manually to ensure upstream-worthy quality.
+If this is problematic for you, you are free to develop your own port and to use mine as reference. Do note a lot of the code will eventually be rewritten manually to ensure upstream-worthy quality.
 
 ## Q&A
 
 ### Wasn't this port called "linux-tn8"?
 
-**A:** The NVIDIA SHIELD Tablet's official codename is "Tegra Note 8" (TN8). The device tree names were based on the downstream kernel's naming scheme.
+**A:** The NVIDIA SHIELD Tablet's official codename is "Tegra Note 8" (TN8). The device tree name was based on the downstream kernel's naming scheme.
 
 However, considering:
 
@@ -214,7 +213,7 @@ I have switched the kernel's codename to **`shieldtablet`** to avoid confusion.
 
 ### Previous mainline port attempts
 
-- **Alexandre Courbot** - original basic Linux 3.17 mainline port, luckily saved from deletion by Andrew Querol:
+- **Alexandre Courbot** - original basic Linux 3.17 mainline port for the original bootloader, luckily saved from deletion by Andrew Querol:
   - [winsock/linux](https://github.com/winsock/linux/tree/st8)
 - **Aaron Kling** - more recent partial device trees for the NVIDIA SHIELD Tablet and Ardbeg:
   - [`tegra124-tn8.dts`](https://gitlab.incom.co/CM-Shield/android_hardware_nvidia_t124_lineage/-/blob/lineage-24.0/tegra124-tn8.dts)
@@ -222,7 +221,7 @@ I have switched the kernel's codename to **`shieldtablet`** to avoid confusion.
 
 ### Other devices' mainline ports
 
-- **`tegra124-xiaomi-mocha.dts`** - the other publicly-released TN8 device, extremely similar to the SHIELD Tablet and already upstreamed. Used for some comparisons and general structure. Extremely helpful.
+- **`tegra124-xiaomi-mocha.dts`** - the other publicly-released TN8 device, very similar to the SHIELD Tablet and already upstreamed. Used for some comparisons and general structure. Extremely helpful.
 - **`tegra30-asus-nexus7-grouper-common.dtsi`** - helped me with audio support, as they use the same RT5640/RT5639 codec.
 - **`tegra234-p3737-0000+p3701.dtsi`** and **`tegra234-p3740-0002+p3701-0008.dts`** - helped me tremendously with headphones support, since they also use the RT5640/RT5639 codec's `jack-detect-source` property.
 

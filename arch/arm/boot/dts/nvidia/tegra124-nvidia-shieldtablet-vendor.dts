@@ -4,7 +4,7 @@
 #include "tegra124-nvidia-shieldtablet.dtsi"
 
 / {
-	model = "NVIDIA SHIELD Tablet (5.2.0)";
+	model = "NVIDIA SHIELD Tablet (vendor bootloader)";
 	compatible = "nvidia,shieldtablet", "nvidia,tegra124";
 
 	/*

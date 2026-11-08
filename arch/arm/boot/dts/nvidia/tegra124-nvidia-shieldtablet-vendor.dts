@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+#include "tegra124-nvidia-shieldtablet.dtsi"
+
+/ {
+	model = "NVIDIA SHIELD Tablet (vendor bootloader)";
+	compatible = "nvidia,shieldtablet", "nvidia,tegra124";
+
+	/*
+	 * Downstream command line passed "mem=2010M@2048M", i.e.
+	 * 0x80000000 - 0xfda00000. Everything above is owned by firmware:
+	 *
+	 *   0xfdaff000  LP0 resume vector (4 KiB)   (lp0_vec=4096@0xfdaff000)
+	 *   0xfdb00000  NCK (1 MiB)                 (nck=1048576@0xfdb00000)
+	 *   0xfe000000  TSEC carveout (32 MiB)      (tsec=32M@4064M)
+	 *
+	 * Rather than reserving each of those (and guessing what sits in the
+	 * unnamed gaps, which on this bootloader likely includes TrustZone
+	 * memory), the kernel is simply never given that range, exactly like
+	 * the working downstream kernel.
+	 */
+	memory@80000000 {
+		reg = <0x0 0x80000000 0x0 0x7da00000>;
+	};
+
+	chosen {
+		bootargs = "panic=15 gpt root=/dev/mmcblk1p2 rw rootwait rootfstype=f2fs rootflags=compress_algorithm=zstd:1,compress_chksum,atgc,gc_merge,lazytime";
+
+		/*
+		 * Ramdisk placement (reverse-engineered from the 5.2.0 EBT):
+		 * the bootloader ignores the kernel/ramdisk addresses in the
+		 * Android boot image header and copies the ramdisk to a fixed
+		 * DRAM_BASE + 0x2580000 = 0x82580000 (the Android L bootloader
+		 * used + 0x1680000 = 0x81680000, which is why -l has a different
+		 * value). It rejects ramdisks larger than 20 MiB.
+		 *
+		 * It writes linux,initrd-start/end into the DTB it loads from its
+		 * own "DTB" partition, but with CONFIG_ARM_APPENDED_DTB our DTB
+		 * replaces that one, so they must be set here. Like -l, the end
+		 * is a fixed upper bound (17.5 MiB), not the exact size. The
+		 * absolute maximum is 0x83980000, where the bootloader puts its own
+		 * DTB.
+		 */
+		linux,initrd-start = <0x82580000>;
+		linux,initrd-end = <0x83700000>;
+
+		/*
+		 * Display is left on by the bootloader, same framebuffer as on
+		 * the Android L bootloader (tegra_fbmem=18743296@0xad012000,
+		 * 1200x1920, 64 byte aligned pitch).
+		 */
+		framebuffer@ad012000 {
+			compatible = "simple-framebuffer";
+			memory-region = <&bootloader_fb>;
+			width = <1200>;
+			height = <1920>;
+			stride = <(1216 * 4)>;
+			format = "a8b8g8r8";
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		bootloader_fb: bootloader-framebuffer@ad012000 {
+			reg = <0x0 0xad012000 0x0 0x011e0000>;
+			no-map;
+		};
+
+		/*
+		 * Used by the downstream kernel for ramoops/pstore
+		 * ("ramoops: attached 0x200000@0xfd800000") and probably by the
+		 * bootloader for crash data ("found existing invalid buffer").
+		 * Kept away from the allocator.
+		 */
+		ramoops@fd800000 {
+			reg = <0x0 0xfd800000 0x0 0x00200000>;
+			no-map;
+		};
+
+		/*
+		 * Not reserved on purpose: downstream carves out 188 MiB at
+		 * 0xf1c00000 as a resizable VPR CMA heap ("vpr_resize"). The
+		 * bootloader reports no VPR base ("Vpr: 00000000 - 0b9fffff"),
+		 * so nothing protects it at boot and it is plain RAM until a
+		 * driver asks TrustZone to program VPR.
+		 */
+	};
+
+	/*
+	 * The firmware advertises PSCI 0.2 (the vendor DTB says "arm,psci-0.2")
+	 * but its SYSTEM_OFF does not work: calling it never returns. Under 0.2
+	 * the kernel claims pm_power_off for that call, which also keeps the
+	 * Palmas PMIC from powering the tablet off. Describe the firmware as
+	 * PSCI 0.1 instead, so that SYSTEM_OFF is never used and power-off goes
+	 * through the PMIC. Restart then goes through the PMC rather than PSCI
+	 * SYSTEM_RESET. The function IDs are the standard SMC32 ones, and only
+	 * the calls that are actually needed are listed.
+	 */
+	psci {
+		compatible = "arm,psci";
+		method = "smc";
+		cpu_off = <0x84000002>;
+		cpu_on = <0x84000003>;
+	};
+};

@@ -91,12 +91,19 @@
 	};
 
 	/*
-	 * Standard PSCI 0.2: function IDs come from the specification, so
-	 * none are listed (unlike -l, whose bootloader needs them).
-	 * Matches the vendor DTB (compatible "arm,psci-0.2", method "smc").
+	 * The firmware advertises PSCI 0.2 (the vendor DTB says "arm,psci-0.2")
+	 * but its SYSTEM_OFF does not work: calling it never returns. Under 0.2
+	 * the kernel claims pm_power_off for that call, which also keeps the
+	 * Palmas PMIC from powering the tablet off. Describe the firmware as
+	 * PSCI 0.1 instead, so that SYSTEM_OFF is never used and power-off goes
+	 * through the PMIC. Restart then goes through the PMC rather than PSCI
+	 * SYSTEM_RESET. The function IDs are the standard SMC32 ones, and only
+	 * the calls that are actually needed are listed.
 	 */
 	psci {
-		compatible = "arm,psci-0.2";
+		compatible = "arm,psci";
 		method = "smc";
+		cpu_off = <0x84000002>;
+		cpu_on = <0x84000003>;
 	};
 };

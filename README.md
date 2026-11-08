@@ -142,13 +142,25 @@ See `drivers/gpu/drm/tegra/output.c`.
 
 The 5.2.0 bootloader's firmware implements PSCI 0.2 and powers CPU1-3 on itself, so the generic PSCI SMP operations are used. The one catch is that the firmware ignores the Thumb bit of the CPU_ON entry point and always enters in ARM state, which a Thumb-2 kernel's `secondary_startup` is not. CPU_ON is therefore given `secondary_startup_arm` instead, the same way the newer downstream kernels use their ARM-mode `tegra_secondary_startup` stub.
 
-Alternatively, you may simply set `CONFIG_THUMB2_KERNEL=n`, which doesn't need the workaround.
+Alternatively, you may simply set `CONFIG_THUMB2_KERNEL=n`, which doesn't need the workaround but makes the kernel larger.
 
 This kernel port configures both.
 
 See:
 
 - `arch/arm/mach-tegra/platsmp.c`
+
+### Power-off
+
+The 5.2.0 bootloader's firmware advertises PSCI 0.2, but its `SYSTEM_OFF` does not work: calling it never returns. `SYSTEM_RESET` works.
+
+When the kernel finds a PSCI 0.2 firmware it claims the legacy `pm_power_off` hook for `SYSTEM_OFF`, and the Palmas driver only installs its own power-off callback if that hook is still free. The PMIC, which is what actually cuts the power on this tablet, was therefore never reached. The screen turned off, but the tablet stayed powered until the power button was held for ten seconds.
+
+Running the PMIC's handler after PSCI's does not help, since the firmware call never returns. The `-m` device tree therefore describes the firmware as PSCI 0.1 (`arm,psci`) with explicit `cpu_on`/`cpu_off` function IDs, like `-l` does. PSCI 0.1 neither claims `pm_power_off` nor registers a restart handler, so `SYSTEM_OFF` is never called, the PMIC powers the tablet off, and the PMC restart handler restarts it instead of `SYSTEM_RESET`.
+
+The catch is that PSCI 0.1 has no `AFFINITY_INFO`, so CPU hotplug cannot confirm that a CPU is really off before it is brought back.
+
+See `arch/arm/boot/dts/nvidia/tegra124-nvidia-shieldtablet-m.dts`.
 
 ### USB Device Mode
 

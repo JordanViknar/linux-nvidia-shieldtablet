@@ -2,9 +2,9 @@
 
 > [!IMPORTANT]
 > 
-> This kernel is tested exclusively on the NVIDIA SHIELD Tablet K1's 0.0.0 (first bootloader, Android L, equivalent to 3.1.1 on other models) and 5.2.0 (Android M/N) bootloaders.
+> This kernel is tested exclusively on an NVIDIA SHIELD Tablet K1 with the 5.2.0 (Android M/N) bootloader.
 > 
-> Support for the 5.2.0 bootloader is currently still very rough, beware. It is however intended to eventually become the only supported vendor bootloader setup.
+> Support for the 5.2.0 bootloader is currently still very rough, beware. The switch from 0.0.0/3.1.1 is still very recent.
 >
 > **Use this kernel at your own risk.**
 > 
@@ -22,7 +22,7 @@
 
 ## Current status
 
-*(Note : this section currently applies only to the 0.0.0/3.1.1 bootloader.)*
+*(Note : this section has not been updated yet for the 5.2.0 bootloader.)*
 
 ### ✅ Fully functional
 
@@ -140,13 +140,14 @@ See `drivers/gpu/drm/tegra/output.c`.
 
 ### SMP
 
-On the Android L bootloader (may not be exclusive to it), PSCI CPU_ON claims success but never actually powers on CPU1-3.
+The 5.2.0 bootloader's firmware implements PSCI 0.2 and powers CPU1-3 on itself, so the generic PSCI SMP operations are used. The one catch is that the firmware ignores the Thumb bit of the CPU_ON entry point and always enters in ARM state, which a Thumb-2 kernel's `secondary_startup` is not. CPU_ON is therefore given `secondary_startup_arm` instead, the same way the newer downstream kernels use their ARM-mode `tegra_secondary_startup` stub.
 
-Worked around by using a PSCI CPU_ON call on CPU0 (already running) purely to register the reset vector with firmware, then powering CPU1-3 on directly via PMC instead of PSCI, matching what the Tegra4Linux kernel does.
+Alternatively, you may simply set `CONFIG_THUMB2_KERNEL=n`, which doesn't need the workaround.
+
+This kernel port configures both.
 
 See:
 
-- `arch/arm/mach-tegra/reset.c`
 - `arch/arm/mach-tegra/platsmp.c`
 
 ### USB Device Mode

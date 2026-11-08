@@ -16,7 +16,7 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/jiffies.h>
-#include <linux/of.h>
+#include <linux/psci.h>
 #include <linux/smp.h>
 
 #include <soc/tegra/flowctrl.h>
@@ -25,6 +25,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/mach-types.h>
+#include <asm/psci.h>
 #include <asm/smp_plat.h>
 #include <asm/smp_scu.h>
 
@@ -191,21 +192,36 @@ const struct smp_operations tegra_smp_ops __initconst = {
 };
 
 /*
- * The NVIDIA SHIELD Tablet has a broken PSCI CPU_ON: it claims success
- * but never actually powers on the other CPUs. This is known to affect
- * devices on the Android L-era bootloader, though it might not be
- * exclusive to it - newer bootloaders may or may not have a fixed TLK.
- * So on this device we skip PSCI here and power CPU1-3 on ourselves the
- * old-fashioned way, using tegra_smp_ops above.
+ * The SHIELD Tablet's secure firmware (5.2.0 bootloader) implements PSCI 0.2
+ * and powers CPUs on itself, but it does not honour the Thumb bit of the
+ * entry point given to CPU_ON: its warm-boot path returns to the non-secure
+ * world with "movs pc, lr" and an SPSR that always selects ARM state.
  *
- * PSCI isn't useless here though - it's still needed for one other
- * thing. See the comment in reset.c for that part.
+ * The generic PSCI SMP operations pass &secondary_startup, which on a
+ * Thumb-2 kernel is a Thumb symbol (bit 0 set). CPU1-3 would then start
+ * executing Thumb code as ARM and never come online, although CPU_ON
+ * itself returned success. Hand firmware the ARM-mode entry instead; it
+ * switches to Thumb itself where needed.
  */
+static int tegra_psci_boot_secondary(unsigned int cpu, struct task_struct *idle)
+{
+	if (!psci_ops.cpu_on)
+		return -ENODEV;
+
+	return psci_ops.cpu_on(cpu_logical_map(cpu),
+			       virt_to_idmap(&secondary_startup_arm) & ~1UL);
+}
+
+static struct smp_operations tegra_psci_smp_ops __initdata;
+
 bool __init tegra_smp_init(void)
 {
-	if (!of_machine_is_compatible("nvidia,shieldtablet"))
+	if (!psci_smp_available())
 		return false;
 
-	smp_set_ops(&tegra_smp_ops);
+	/* Generic PSCI SMP operations, except for the entry point. */
+	tegra_psci_smp_ops = psci_smp_ops;
+	tegra_psci_smp_ops.smp_boot_secondary = tegra_psci_boot_secondary;
+	smp_set_ops(&tegra_psci_smp_ops);
 	return true;
 }

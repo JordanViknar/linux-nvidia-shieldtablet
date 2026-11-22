@@ -103,7 +103,6 @@ static const char * const tegra_dt_board_compat[] = {
 	NULL
 };
 
-extern bool tegra_smp_init(void);
 DT_MACHINE_START(TEGRA_DT, "NVIDIA Tegra SoC (Flattened Device Tree)")
 	.l2c_aux_val	= 0x3c400000,
 	.l2c_aux_mask	= 0xc20fc3ff,

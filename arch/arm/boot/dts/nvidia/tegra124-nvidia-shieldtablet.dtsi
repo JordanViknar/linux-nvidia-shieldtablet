@@ -83,7 +83,7 @@
 		hdmi: hdmi@54280000 {
 			status = "okay";
 
-			hdmi-supply = <&vdd_hdmi_5v0>;
+			hdmi-supply = <&vddio_hdmi_5v0>;
 			pll-supply = <&vdd_hdmi_n5>;
 			vdd-supply = <&ldoln_reg>;
 
@@ -101,7 +101,7 @@
 				compatible = "auo,b080uan01"; // CONFIG_DRM_PANEL_SIMPLE
 				reg = <0>;
 
-				//avdd-supply = <&avdd_lcd>;
+				/* AVDD is the always-on avdd_lcd, see the Palmas LDO2 comment. */
 				power-supply = <&vddio_dvdd_lcd>;
 
 				backlight = <&backlight>;
@@ -315,10 +315,6 @@
 
 			omit-battery-class;
 
-			battery_charger: charger {
-				regulator-name = "batt_regulator";
-			};
-
 			usb0_vbus: usb-otg-vbus {
 				regulator-name = "vbus_regulator";
 			};
@@ -483,15 +479,14 @@
 						regulator-min-microvolt = <700000>;
 						regulator-max-microvolt = <1400000>;
 						regulator-init-microvolt = <1000000>;
-						regulator-always-on; // --- Could be necessary
-						//regulator-boot-on;
+						regulator-boot-on;
 					};
 
 					/* DDR voltage (SMPS6, fixed 1.35V) */
 					palmas_smps6_reg: smps6 {
 						regulator-name = "vddio-ddr";
-						// regulator-min-microvolt = <1350000>;
-						// regulator-max-microvolt = <1350000>;
+						regulator-min-microvolt = <1350000>;
+						regulator-max-microvolt = <1350000>;
 						regulator-always-on;
 						regulator-boot-on;
 					};
@@ -540,29 +535,38 @@
 					/* PLL supply (LDO1, 1.05V) */
 					ldo1 {
 						regulator-name = "avdd-pll";
-						//regulator-min-microvolt = <1050000>;
-						//regulator-max-microvolt = <1050000>;
+						regulator-min-microvolt = <1050000>;
+						regulator-max-microvolt = <1050000>;
 						regulator-always-on;
 						regulator-boot-on;
-						// vin-supply = <&palmas_smps6_reg>;
 					};
 
-					/* LCD AVDD / touch analogue (LDO2, 3.3V) */
+					/*
+					 * LCD AVDD (LDO2, 3.3V)
+					 *
+					 * The panel needs this rail and vddio_dvdd_lcd (downstream
+					 * enables AVDD first, then DVDD), but panel-simple only
+					 * takes one supply, which is DVDD. Nothing can consume
+					 * this one, so it has to stay on.
+					 */
 					avdd_lcd: ldo2 {
 						regulator-name = "avdd-lcd";
 						regulator-min-microvolt = <3300000>;
 						regulator-max-microvolt = <3300000>;
-						regulator-boot-on;
-						regulator-always-on; // TEMPORARY
+						regulator-always-on;
 					};
 
-					/* Touch supply (LDO3, 3.0V) */
+					/*
+					 * Touch supply (LDO3, 3.3V), parent of avdd_ts_3v3.
+					 *
+					 * Downstream also sets ti,disable-pull-down here, but the
+					 * mainline Palmas driver does not implement it.
+					 */
 					ldo3_reg: ldo3 {
 						regulator-name = "vdd-touch";
 						regulator-min-microvolt = <3300000>;
 						regulator-max-microvolt = <3300000>;
 						regulator-enable-ramp-delay = <3000>;
-						ti,disable-pull-down;
 					};
 
 					/* Camera AVDD (LDO4, 2.7V) */
@@ -575,10 +579,9 @@
 					/* DSI/CSI supply (LDO5, 1.2V) */
 					ldo5_reg: ldo5 {
 						regulator-name = "avdd-dsi-csi";
-						//regulator-min-microvolt = <1200000>;
-						//regulator-max-microvolt = <1200000>;
-						regulator-always-on; // TEMPORARY
-						regulator-boot-on; // TEMPORARY
+						regulator-min-microvolt = <1200000>;
+						regulator-max-microvolt = <1200000>;
+						regulator-boot-on;
 					};
 
 					/* Fuse blow (LDO6, 1.8V) */
@@ -615,8 +618,8 @@
 					/* LDOLN – HDMI / HV I/O supply */
 					ldoln_reg: ldoln {
 						regulator-name = "vddio-hv";
-						// regulator-min-microvolt = <3300000>;
-						// regulator-max-microvolt = <3300000>;
+						regulator-min-microvolt = <3300000>;
+						regulator-max-microvolt = <3300000>;
 						regulator-always-on;
 						regulator-boot-on;
 					};
@@ -624,8 +627,8 @@
 					/* LDOUSB – USB PHY AVDD 3.3 V */
 					ldousb_reg: ldousb {
 						regulator-name = "avdd-usb";
-						// regulator-min-microvolt = <3300000>;
-						// regulator-max-microvolt = <3300000>;
+						regulator-min-microvolt = <3300000>;
+						regulator-max-microvolt = <3300000>;
 						regulator-always-on;
 						regulator-boot-on;
 					};
@@ -875,8 +878,13 @@
 		status = "okay";
 		dr_mode = "otg";
 
+		/*
+		 * Despite the name, this is not host VBUS (that is usb0_vbus, on the
+		 * controller node). phy-tegra-usb enables "vbus" at PHY init in every
+		 * mode, which makes it the right hook for the PHY's AVDD_USB rail.
+		 */
 		vbus-supply = <&ldousb_reg>;
-		
+
 		/*
 		 * Note to self :
 		 * Downstream `xcvr-use-fuses` != Mainline `xcvr-setup-use-fuses`
@@ -957,6 +965,7 @@
 		regulator-name = "vddio_dvdd_lcd";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
 		gpio = <&palmas_gpio 6 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&palmas_smps8_reg>;
@@ -979,9 +988,9 @@
 		gpio = <&gpio TEGRA_GPIO(N, 5) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&palmas_smps6_reg>;
 	};
-	vdd_hdmi_5v0: regulator-hdmicon {
+	vddio_hdmi_5v0: regulator-hdmicon {
 		compatible = "regulator-fixed"; // CONFIG_REGULATOR_FIXED_VOLTAGE
-		regulator-name = "vdd_hdmi_5v0";
+		regulator-name = "vddio_hdmi_5v0";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		gpio = <&gpio TEGRA_GPIO(K, 6) GPIO_ACTIVE_HIGH>;
@@ -1004,7 +1013,7 @@
 		regulator-max-microvolt = <3300000>;
 		gpio = <&palmas_gpio 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		vin-supply = <&ldo3_reg>; // downstream runtime reports it's backed by ldo3_reg/vdd-touch, downstream DTS says it's ldousb/avdd-usb ?
+		vin-supply = <&ldo3_reg>;
 	};
 
 	sound {
